@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>幸福柑仔店 - AD8動態題目版</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        html, body { 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%; margin: 0; padding: 0; 
+            background-color: #2d3748; font-family: 'Noto Sans TC', sans-serif; 
+            overflow: hidden; overscroll-behavior: none; 
+        }
+
+        #mobile-container {
+            width: 100%; height: 100%; max-width: 480px; margin: 0 auto; 
+            background: #000; position: relative; overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        /* 背景與角色層 */
+        #bg-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover; background-position: center;
+            transition: opacity 0.5s ease; background-color: #333; z-index: 1;
+        }
+
+        #char-container {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+        .char-img {
+            position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+            max-height: 85%; width: auto; max-width: 95%; opacity: 0; 
+            filter: drop-shadow(0 5px 15px rgba(0,0,0,0.4));
+            transition: opacity 0.3s ease-in-out; 
+            /* 新增：讓角色或物件可以直接被點擊 */
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        .char-visible { opacity: 1 !important; }
+        
+        /* 特殊位置調整 */
+        .object-mode { bottom: 25% !important; max-height: 45% !important; }
+        .calendar-pos { bottom: 45% !important; max-height: 32% !important; }
+        .phone-pos { bottom: 30% !important; max-height: 45% !important; transform: translateX(-50%) scale(0.7) !important; }
+
+        /* HUD */
+        #top-hud {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; pointer-events: none; z-index: 20;
+        }
+        .status-pill {
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+            padding: 8px 16px; border-radius: 25px; font-size: 16px; font-weight: bold;
+            border: 1px solid rgba(255,255,255,0.2); color: white; display: flex; align-items: center; gap: 8px;
+        }
+
+        #music-toggle {
+            position: absolute; top: 15px; right: 15px; z-index: 50;
+            width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(0,0,0,0.6); border: 2px solid #fff;
+            color: white; font-size: 20px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; pointer-events: auto;
+        }
+
+        /* 對話框 */
+        #dialog-area {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 38%;
+            background: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 75%, rgba(0,0,0,0) 100%);
+            padding: 25px; padding-top: 50px; color: white; z-index: 30;
+            display: flex; flex-direction: column; cursor: pointer;
+        }
+        #speaker-box {
+            align-self: flex-start; background: #f6ad55; color: #2d3748;
+            padding: 6px 18px; border-radius: 8px; font-weight: bold; font-size: 20px; margin-bottom: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3); transform: translateY(-5px);
+            display: flex; align-items: center; gap: 10px; white-space: nowrap;
+        }
+        #dialog-text { 
+            font-size: 22px; line-height: 1.6; flex: 1; overflow-y: auto; 
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8); white-space: pre-wrap; word-break: break-all;
+        }
+        .next-arrow { position: absolute; bottom: 25px; right: 25px; color: #f6ad55; animation: bounce 1s infinite; font-size: 28px; }
+
+        /* 互動層 */
+        #interaction-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+            z-index: 100; display: none;
+            flex-direction: column; justify-content: center; align-items: center; padding: 25px;
+        }
+        #interaction-title {
+            color: white; font-size: 24px; font-weight: bold; text-align: center; margin-bottom: 30px;
+            background: rgba(255,255,255,0.1); padding: 15px; border-radius: 12px; width: 100%;
+            border: 1px solid rgba(255,255,255,0.2); display: flex; justify-content: space-between; align-items: center;
+        }
+        #interaction-content { width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+        /* 優化後的選項按鈕 */
+        .choice-btn {
+            background: white !important; color: #2d3748 !important; width: 100%; 
+            min-height: 70px; padding: 10px 20px; margin-bottom: 16px;
+            border-radius: 50px; border: none; font-size: 20px; font-weight: bold;
+            box-shadow: 0 4px 0 #cbd5e0; transition: transform 0.1s;
+            display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+            flex-shrink: 0;
+            touch-action: manipulation; /* 防雙擊放大 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .choice-btn:active { transform: translateY(4px); box-shadow: none; background: #e2e8f0 !important; }
+        
+        /* 選項內的朗讀按鈕 */
+        .opt-speak-btn {
+            background: #f6ad55; color: white;
+            width: 44px; height: 44px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin-right: 15px; flex-shrink: 0; cursor: pointer;
+            box-shadow: 0 2px 0 #dd6b20;
+        }
+        .opt-speak-btn:active { transform: scale(0.95); box-shadow: none; }
+
+        /* 輸入介面 */
+        .input-group { display: flex; gap: 8px; margin-bottom: 25px; width: 100%; justify-content: center; }
+        .confirm-btn { background: #48bb78 !important; color: white !important; padding: 18px 40px; border-radius: 50px; font-size: 24px; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 6px 0 #2f855a; width: 100%; margin-top: 15px; touch-action: manipulation; }
+
+        /* Android WebView 安全版：完全不依賴原生 select/date picker */
+        .date-stepper-wrap {
+            width: 100%; background: rgba(255,255,255,0.98); border-radius: 22px;
+            padding: 18px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45);
+        }
+        .date-stepper-hint {
+            text-align: center; color: #718096; font-size: 15px; margin-bottom: 14px;
+        }
+        .date-stepper-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; }
+        .date-stepper-col {
+            background: #fffaf0; border: 2px solid #fbd38d; border-radius: 16px;
+            padding: 8px; display: flex; flex-direction: column; align-items: center;
+        }
+        .date-label { font-size: 13px; color: #9c6b2f; font-weight: bold; margin: 2px 0 6px; }
+        .date-step-btn {
+            width: 100%; min-height: 44px; border: 0; border-radius: 12px;
+            background: #f6ad55; color: #fff; font-size: 21px; font-weight: bold;
+            cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+        }
+        .date-step-btn:active { transform: scale(.97); background: #ed8936; }
+        .date-step-value {
+            width: 100%; min-height: 68px; margin: 7px 0; border-radius: 12px;
+            background: white; border: 2px solid #e2e8f0; color: #2d3748;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 22px; text-align: center; line-height: 1.15;
+        }
+        .date-summary {
+            margin-top: 14px; padding: 10px 12px; border-radius: 12px; text-align: center;
+            background: #edfdf5; border: 1px solid #9ae6b4; color: #276749; font-size: 18px; font-weight: bold;
+        }
+
+        /* 日曆圖上的動態日期：與圖片同位置、同縮放，不需製作任何數字 PNG */
+        #calendar-date-overlay {
+            position: absolute; left: 50%; bottom: 45%; height: 32%; aspect-ratio: 1 / 1;
+            transform: translateX(-50%); z-index: 12; pointer-events: none; display: none;
+        }
+        #calendar-date-text {
+            position: absolute; left: 32%; top: 66%; width: 45%;
+            color: #6b4a2f; text-align: center; font-family: 'Noto Sans TC', sans-serif;
+            font-weight: 700; line-height: 1.25; transform: rotate(-1.5deg);
+            text-shadow: 0 1px 0 rgba(255,255,255,.55); filter: sepia(.15);
+        }
+        #calendar-date-text .roc-year { display:block; font-size: clamp(13px, 3.8vw, 18px); letter-spacing: .04em; }
+        #calendar-date-text .md { display:block; margin-top: 2px; font-size: clamp(17px, 5.2vw, 25px); letter-spacing: .06em; }
+
+        /* Numpad & TimePicker */
+        #numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; margin-bottom: 15px; }
+        .num-btn { 
+            background: rgba(255,255,255,0.15); color: white; border: 2px solid rgba(255,255,255,0.3); 
+            padding: 18px; font-size: 26px; font-weight: bold; border-radius: 12px; cursor: pointer;
+            touch-action: manipulation; /* 防雙擊放大 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .num-btn:active { background: rgba(255,255,255,0.4); }
+        .del-btn { color: #feb2b2; }
+        #numpad-display { width: 100%; background: #fff; color: #2d3748; font-size: 40px; font-weight: bold; text-align: center; padding: 12px; border-radius: 12px; margin-bottom: 20px; border: 4px solid #f6ad55; letter-spacing: 3px; height: 85px; display: flex; align-items: center; justify-content: center; user-select: none; }
+
+        .time-picker-container { display: flex; flex-direction: column; align-items: center; width: 100%; background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .ampm-toggle { display: flex; background: #e2e8f0; border-radius: 50px; padding: 5px; margin-bottom: 20px; width: 100%; }
+        .ampm-btn { flex: 1; padding: 12px; border-radius: 40px; border: none; font-size: 20px; font-weight: bold; cursor: pointer; background: transparent; color: #718096; touch-action: manipulation; user-select: none; }
+        .ampm-btn.active { background: #3b82f6; color: white; }
+        .hour-selector { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+        .hour-btn { background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 15px 0; font-size: 22px; font-weight: bold; color: #2d3748; cursor: pointer; touch-action: manipulation; user-select: none; }
+        .hour-btn.selected { border-color: #f6ad55; background: #fffaf0; color: #ed8936; box-shadow: 0 0 0 2px #f6ad55; }
+
+        /* Report */
+        #report-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 200; backdrop-filter: blur(10px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; color: white; }
+        .report-card { background: #fff; width: 100%; padding: 35px 25px; border-radius: 25px; box-shadow: 0 10px 50px rgba(0,0,0,0.8); text-align: center; color: #2d3748; }
+        .stamp { border: 5px solid #e53e3e; color: #e53e3e; border-radius: 15px; padding: 10px 25px; font-size: 32px; font-weight: bold; transform: rotate(-5deg); margin: 30px auto; display: inline-block; }
+        
+        /* 用戶資料輸入框樣式 */
+        .user-input {
+            width: 80%; padding: 15px; margin-bottom: 15px; border-radius: 50px;
+            border: 2px solid #f6ad55; font-size: 18px; text-align: center;
+        }
+
+
+
+        /* API 等待/錯誤畫面 */
+        .api-waiting-card {
+            background: #fff; width: 100%; padding: 35px 25px; border-radius: 25px;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.8); text-align: center; color: #2d3748;
+        }
+        .upload-spinner {
+            display: inline-block;
+            width: 24px; height: 24px;
+            border: 3px solid #cbd5e0;
+            border-top-color: #f6ad55;
+            border-radius: 50%;
+            animation: uploadSpin 0.7s linear infinite;
+            vertical-align: -5px;
+        }
+        @keyframes uploadSpin { to { transform: rotate(360deg); } }
+
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+    </style>
+</head>
+<body>
+
+    <div id="mobile-container">
+        <audio id="bgMusic" loop preload="auto"><source src="https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/audio/bgm.mp3" type="audio/mpeg"></audio>
+
+        <div id="music-toggle" onclick="toggleMusic()">
+            <i class="fas fa-volume-up"></i>
+        </div>
+
+        <div id="bg-layer"></div>
+        
+        <div id="char-container">
+            <img id="char-1" class="char-img" alt="C1" onclick="advanceStory()">
+            <img id="char-2" class="char-img" alt="C2" onclick="advanceStory()">
+            <div id="calendar-date-overlay" aria-hidden="true">
+                <div id="calendar-date-text">
+                    <span class="roc-year" id="calendar-roc-year"></span>
+                    <span class="md" id="calendar-md"></span>
+                </div>
+            </div>
+        </div>
+        
+        <img id="key-item" style="position:absolute; top:52%; left:62%; width:160px; padding:30px; display:none; z-index:15; cursor:pointer; touch-action: manipulation;" src="https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/key.png" alt="Key">
+        
+        <div id="top-hud">
+            <div class="status-pill"><i class="fas fa-clock"></i> <span id="game-time">08:00</span></div>
+            <div class="status-pill" style="margin-right: 50px;"><i class="fas fa-coins"></i> 營收: <span id="game-money">0</span></div>
+        </div>
+        
+        <div id="dialog-area" onclick="advanceStory()">
+            <div id="speaker-box">
+                <span id="speaker-name">...</span>
+                <div class="read-btn" onclick="event.stopPropagation(); replayVoice()"><i class="fas fa-volume-up"></i></div>
+            </div>
+            <div id="dialog-text">...</div>
+            <div class="next-arrow"><i class="fas fa-caret-down"></i></div>
+        </div>
+        
+        <div id="interaction-overlay">
+            <div id="interaction-title">
+                <span id="title-text">請選擇</span>
+                <div class="title-speak-btn" style="background: rgba(255,255,255,0.2); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="speakTitle()"><i class="fas fa-volume-up"></i></div>
+            </div>
+            <div id="interaction-content"></div>
+        </div>
+
+        <div id="intro-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; text-align:center; color:white;">
+            <div style="font-size: 40px; font-weight: bold; color: #f6ad55; margin-bottom: 25px;">幸福柑仔店</div>
+            <div style="font-size:18px; line-height:1.6; color:#e2e8f0; margin-bottom:30px;">
+                歡迎光臨！今天您將化身為<b>「一日店長」</b>。<br>準備好後，請點擊開始營業。
+            </div>
+
+            <button id="start-btn" onclick="startGame()" disabled style="background: linear-gradient(135deg, #f6ad55, #ed8936); color: #fff; border: none; padding: 18px 70px; border-radius: 50px; font-size: 24px; font-weight: bold; cursor: pointer; transition: 0.3s; opacity: 0.7; margin-top: 20px;">遊戲載入中...</button>
+        </div>
+        
+        <div id="report-overlay" style="display:none;">
+            <div class="report-card">
+                <h2 style="margin:0;">📅 本日營運日報</h2>
+                <div id="final-stamp" class="stamp">金牌店長</div>
+                <div style="display:flex; justify-content:space-between; border-bottom:1px dashed #ccc; padding:15px 0;">
+                    <span>營運積分</span><span id="report-money" style="font-weight:bold; color:#38a169; font-size:22px;">$0</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; border-bottom:1px dashed #ccc; padding:15px 0;">
+                    <span>專注力評級</span><span id="report-risk" style="font-weight:bold; font-size:22px;">S 級</span>
+                </div>
+                <p id="report-advice" style="font-size:18px; margin-top:25px; text-align:left; background:#f7fafc; padding:20px; border-radius:15px; line-height:1.6;">...</p>
+                <div id="saving-status" style="font-size:14px; color:gray; margin-top:10px;">資料儲存中...</div>
+            </div>
+            <button onclick="location.reload()" style="background:#4fd1c5; color:white; border:none; padding:18px 50px; border-radius:50px; font-size:22px; font-weight:bold; margin-top:30px; cursor:pointer;">明日繼續營業</button>
+        </div>
+    </div>
+
+    <script>
+        // ================= GO HEALTH API 參數 =================
+        const API_URL = 'https://www.st.happygocard.com.tw/HAP/gameresult';
+        const urlParams = new URLSearchParams(window.location.search);
+        const URL_PARAM_OBJECT = Object.fromEntries(urlParams.entries());
+        const HEALTH_ID = urlParams.get('health_id') || '';
+        const GAME_ID = urlParams.get('game_id') || '';
+        // 本遊戲不分難度；若前端仍有帶 game_level，僅原樣往後送。
+        const GAME_LEVEL = urlParams.get('game_level') || '';
+        const AGE = urlParams.get('age') || '';
+        const MOBILE = urlParams.get('mobile') || '';
+        const URL_NAME = urlParams.get('name') || urlParams.get('nickname') || '';
+
+        let tabBlurCount = 0;
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) tabBlurCount++;
+        });
+
+        // ================= FIREBASE 設定與邏輯 =================
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyB6wcFs5gSiNDCSweKcEzgRpbIAAb5I3Vo",
+            authDomain: "smart-squat-health.firebaseapp.com",
+            projectId: "smart-squat-health",
+            storageBucket: "smart-squat-health.firebasestorage.app",
+            messagingSenderId: "475970550783",
+            appId: "1:475970550783:web:2d7dcacb2e55b562eb05ca",
+        };
+
+        // 初始化 Firebase
+        let db;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+            console.log("Firebase initialized");
+        } catch (e) {
+            console.error("Firebase init error:", e);
+        }
+
+        let userData = {
+            name: "",
+            age: 0,
+            startTime: null,
+            logs: []
+        };
+
+        function saveGameRecord(finalRisk, finalMoney) {
+            if(!db) return;
+            const statusEl = document.getElementById('saving-status');
+            
+            db.collection("game_records").add({
+                name: userData.name,
+                age: userData.age,
+                date: new Date(),
+                riskScore: finalRisk,
+                totalMoney: finalMoney,
+                details: userData.logs,
+                platform: navigator.userAgent
+            })
+            .then((docRef) => {
+                console.log("Document written with ID: ", docRef.id);
+                statusEl.innerText = "✅ 測驗結果已雲端備份";
+                statusEl.style.color = "green";
+            })
+            .catch((error) => {
+                console.error("Error adding document: ", error);
+                statusEl.innerText = "⚠️ 資料儲存失敗 (請檢查網路)";
+                statusEl.style.color = "red";
+            });
+        }
+
+        // ================= 原有遊戲邏輯 =================
+
+        const ASSETS = {
+            bg_morning: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/store-day.jpg",
+            bg_noon: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/store-day.jpg",
+            bg_evening: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/store-dusk.jpg",
+            bg_night: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/store-night.jpg",
+            bg_desktop: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/desktop.jpg",
+            char_oldman: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/wang.png",
+            char_delivery: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/deliveryboy.png",
+            char_customer: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/mrschen.png", 
+            char_tv: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/tv.png",
+            char_keys: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/key.png",
+            char_phone: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/phone.png", 
+            char_clock: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/calendar.png" 
+        };
+
+        const VOICE_PROFILES = {
+            "店長": { pitch: 1.0, rate: 1.0 },
+            "旁白": { pitch: 1.0, rate: 1.1 },
+            "肉販小劉": { pitch: 1.5, rate: 1.4 }, 
+            "米店阿強": { pitch: 0.7, rate: 1.2 },
+            "老王": { pitch: 0.6, rate: 0.8 }, 
+            "陳媽媽": { pitch: 1.4, rate: 1.1 }
+        };
+
+        // ================= 每局動態題目設定 =================
+        function randomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function getTaipeiDateParts() {
+            // 固定以台灣時區判斷「今天」，避免裝置時區造成日期誤差。
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Taipei', year: 'numeric', month: 'numeric', day: 'numeric'
+            }).formatToParts(new Date());
+            const result = {};
+            parts.forEach(p => { if (p.type !== 'literal') result[p.type] = parseInt(p.value, 10); });
+            return { year: result.year, month: result.month, day: result.day };
+        }
+
+        function toRocYear(year) { return year - 1911; }
+        function formatHour12(hour24) { return hour24 > 12 ? hour24 - 12 : hour24; }
+        function pad2(n) { return String(n).padStart(2, '0'); }
+
+        // 送貨：下午 1–6 點（13–18）隨機，整局固定同一時間。
+        const deliveryHour = randomInt(13, 18);
+        const deliveryHour12 = formatHour12(deliveryHour);
+        const deliveryTimeText = `下午 ${deliveryHour12} 點`;
+        const deliveryHudTime = `${pad2(deliveryHour)}:00`;
+        const deliveryBg = deliveryHour <= 15 ? 'bg_noon' : (deliveryHour <= 17 ? 'bg_evening' : 'bg_night');
+
+        // 陳太太消費：100–999 元隨機，不包含 1000 元；以 1000 元付款。
+        const purchaseAmount = randomInt(100, 999);
+        const changeAmount = 1000 - purchaseAmount;
+
+        // 日曆選擇後保留使用者實際選擇，顯示在場景日曆上。
+        let selectedCalendarDate = null;
+
+        const SCRIPT = [
+            { type: "scene", bg: "bg_morning", time: "08:00" },
+            { type: "talk", speaker: "店長", text: "早安！又是充滿活力的一天。" },
+            { type: "talk", speaker: "店長", text: "首先要把日曆撕到今天... 咦？今天是幾號？", char: "char_clock" },
+            { type: "date_input", text: "請選擇今日的正確日期：", char: "char_clock", qId: "Q1_Date",
+              correct: { money: 100, s: 0, reaction: {text: "對啦！日曆換好了，準備開始打拼！", speaker: "店長"} },
+              wrong: { money: 0, s: 1, reaction: {text: "咦？日曆好像撕錯了，算了先不管它，開始打拼！", speaker: "店長"} } },
+            
+            { type: "talk", speaker: "旁白", text: "(門口送來一大箱乖乖進貨了，堆得亂七八糟。)" },
+            { type: "talk", speaker: "店長", text: "乖乖進貨了，但堆得亂七八糟。以前我最喜歡擺整齊了...", char: null },
+            { type: "choice", text: "您現在的想法是？", qId: "Q2_Interest", choices: [
+                { t: "再累也要好好整理一下，生意才會好", s: 0, money: 200, reaction: {text: "好，整理完了，看著整齊心裡就舒服。", speaker: "店長"} },
+                { t: "好累喔，偷懶一下，生意不會差多少", s: 1, money: 0, reaction: {text: "唉，真的太累了，先就這樣隨便放吧。", speaker: "店長"} }
+            ], char: null },
+
+            { type: "talk", speaker: "旁白", text: "(鈴鈴鈴—— 櫃台的紅色電話響了)", char: "char_phone" },
+            { type: "talk", speaker: "肉販小劉", text: "『老闆好，我是肉販小劉，我們有進口高級澳洲牛肉超便宜！』", char: "char_phone" },
+            { type: "talk", speaker: "肉販小劉", text: "『外面1斤要一千元，我這邊只要賣一百元，要不要先匯錢給我？』", char: "char_phone" },
+            { type: "choice", text: "您的反應是？", qId: "Q3_Judgment", choices: [
+                { t: "好像很划算！馬上匯款。", s: 1, money: -500, reaction: {text: "好，匯過去了！期待牛肉... 不過心裡怎麼怪怪的？", speaker: "店長"} },
+                { t: "聽起來是詐騙，直接掛斷。", s: 0, money: 500, reaction: {text: "呼... 真的要小心，這絕對是詐騙，不能上當。", speaker: "店長"} }
+            ], char: "char_phone" },
+            
+            { type: "talk", speaker: "旁白", text: "(鈴鈴鈴—— 電話又響了)", char: "char_phone" },
+            { type: "talk", speaker: "米店阿強", text: `『喂？老闆喔，我是米店阿強啦！${deliveryTimeText}會過去送貨，先跟你講一聲！』`, char: "char_phone" },
+            { type: "talk", speaker: "店長", text: `好，${deliveryTimeText}，我記住了。`, char: "char_phone" },
+
+            { type: "scene", bg: "bg_morning", time: "10:00" },
+            { type: "talk", speaker: "旁白", text: "(隔壁的老王搖著扇子走了進來)", char: "char_oldman" }, 
+            { type: "talk", speaker: "老王", text: "店長早啊！昨天天氣好，我去公園打了一套太極拳喔！", char: "char_oldman" },
+            { type: "talk", speaker: "老王", text: "嘿啊，還遇到陳媽媽，聊了很多。", char: "char_oldman" },
+            { type: "choice", text: "您想接著問老王什麼？", qId: "Q4_Memory_Short", choices: [
+                { t: "那公園有什麼新變化嗎？", s: 0, money: 100, reaction: {text: "哈哈，就那樣啦。那我先走了，掰掰！", speaker: "老王"} },
+                { t: "昨天你去哪裡運動啊？", s: 1, money: 0, reaction: {text: "就說去公園打太極拳啊，你忘了喔？那我走了，掰掰！", speaker: "老王"} }
+            ], char: "char_oldman" }, 
+            { type: "talk", speaker: "旁白", text: "(老王揮揮手離開了)", char: null }, 
+
+            { type: "scene", bg: "bg_noon", time: "12:00" },
+            { type: "talk", speaker: "旁白", text: "(正午時分，店裡沒什麼客人，店長坐下來想看個電視休息。)" },
+            { type: "talk", speaker: "店長", text: "中午休息看一下新聞好了... 哎呀！", char: "char_tv", object: true },
+            { type: "talk", speaker: "旁白", text: "(電視畫面變成了雪花雜訊)", char: "char_tv", object: true },
+            { type: "choice", text: "通常您會怎麼做？", qId: "Q5_Tool_Usage", choices: [
+                { t: "檢查訊號線接頭", s: 0, money: 150, reaction: {text: "修好了！果然是訊號線鬆了。", speaker: "店長"} },
+                { t: "使用遙控器關電視", s: 1, money: 0, reaction: {text: "唉唷，怎麼把電視關了，應該要檢查訊號線...", speaker: "店長"} } // 修改第5題選項與台詞
+            ], char: "char_tv", object: true }, 
+
+            { type: "talk", speaker: "旁白", text: "(正午剛過，這時陳媽媽提著籃子進店了...)" },
+            { type: "talk", speaker: "陳媽媽", text: "老闆結帳！我要買這些醬油和糖。", char: "char_customer" },
+            { type: "talk", speaker: "店長", text: `好，一共是 ${purchaseAmount} 元。`, char: "char_customer" },
+            { type: "talk", speaker: "旁白", text: "(陳媽媽遞給您一張 1000 元大鈔，等您找錢。)", char: "char_customer" }, 
+            { type: "number_input", text: "請問要找多少錢？", answer: changeAmount, qId: "Q6_Calculation",
+              correct: { s: 0, money: purchaseAmount, reaction: {text: `沒錯！一共 ${purchaseAmount} 元，找我 ${changeAmount} 元，謝謝老闆！`, speaker: "陳媽媽"} },
+              wrong: { s: 1, money: 0, reaction: {text: `老闆，好像找錯囉！我付 1000 元，應該找 ${changeAmount} 元才對。沒關係，我提醒你一下！`, speaker: "陳媽媽"} },
+              char: "char_customer" },
+            { type: "talk", speaker: "旁白", text: "(陳媽媽開心地提著醬油回家煮飯了)", char: null }, 
+
+            { type: "scene", bg: deliveryBg, time: deliveryHudTime },
+            { type: "talk", speaker: "旁白", text: "(快到約定的時間，這時米店阿強載著幾大袋米到了...)" },
+            { type: "talk", speaker: "米店阿強", text: "老闆！我來送米了！請問我們早上約幾點？", char: "char_delivery" },
+            { type: "time_picker", text: "早上電話中約定的送貨時間是？", answer: deliveryHour, qId: "Q7_Memory_Long",
+              correct: { s: 0, money: 100, reaction: {text: `沒錯！老闆記性真好，就是${deliveryTimeText}。`, speaker: "米店阿強"} },
+              wrong: { s: 1, money: 0, reaction: {text: `老闆... 我們早上說的是${deliveryTimeText}啦，你記錯了吧？`, speaker: "米店阿強"} },
+              char: "char_delivery" }, 
+            { type: "talk", speaker: "旁白", text: "(米店阿強卸完貨離開了)", char: null }, 
+
+            { type: "scene", bg: "bg_night", time: "18:00" },
+            { type: "talk", speaker: "店長", text: "天黑了，該拉鐵門休息了。" },
+            { type: "scene", bg: "bg_desktop", time: "18:00" },
+            { type: "talk", speaker: "店長", text: "糟糕，手上的鑰匙串不知道放哪去了？" },
+            { type: "choice", text: "請選擇尋找區域：", qId: "Q8_Orientation", choices: [
+                { t: "去櫃台桌面找找看", s: 0, money: 200, key: true },
+                { t: "去冰箱裡面找找看", s: 1, money: 0 }
+            ] },
+            { type: "key_search", text: "找到了！原來壓在文件下面。", char: null },
+            { type: "end" }
+        ];
+
+        // ================= 核心邏輯 =================
+        let index = 0, riskScore = 0, totalMoney = 0;
+        let activeCharIndex = 1;
+        let typeWriterTimer = null;
+        let isMusicOn = true;
+        let blockAdvance = false; 
+        let speechSynth = window.speechSynthesis;
+
+        const dom = {
+            bg: document.getElementById('bg-layer'),
+            char1: document.getElementById('char-1'),
+            char2: document.getElementById('char-2'),
+            overlay: document.getElementById('interaction-overlay'),
+            titleText: document.getElementById('title-text'),
+            content: document.getElementById('interaction-content'),
+            dialog: document.getElementById('dialog-area'),
+            speakerName: document.getElementById('speaker-name'),
+            text: document.getElementById('dialog-text'),
+            hudTime: document.getElementById('game-time'),
+            hudMoney: document.getElementById('game-money'),
+            key: document.getElementById('key-item'),
+            startBtn: document.getElementById('start-btn'),
+            bgm: document.getElementById('bgMusic'),
+            calendarOverlay: document.getElementById('calendar-date-overlay'),
+            calendarRocYear: document.getElementById('calendar-roc-year'),
+            calendarMd: document.getElementById('calendar-md')
+        };
+
+        function toggleMusic() {
+            isMusicOn = !isMusicOn;
+            const icon = document.querySelector('#music-toggle i');
+            if (isMusicOn) { icon.className = 'fas fa-volume-up'; dom.bgm.play().catch(e=>{}); } 
+            else { icon.className = 'fas fa-volume-mute'; dom.bgm.pause(); speechSynth.cancel(); }
+        }
+
+        function speak(text, role) {
+            if (!isMusicOn) return; 
+            speechSynth.cancel(); 
+            // 修改：過濾掉括號與不必要的符號，防止被朗讀出來
+            const cleanText = text.replace(/[()（）『』「」]/g, '');
+            const u = new SpeechSynthesisUtterance(cleanText);
+            u.lang = 'zh-TW';
+            const profile = VOICE_PROFILES[role] || { pitch: 1.0, rate: 1.0 };
+            u.pitch = profile.pitch; u.rate = profile.rate;
+            speechSynth.speak(u);
+        }
+
+        function replayVoice() {
+            const scene = SCRIPT[index];
+            if(scene && scene.text) speak(scene.text, scene.speaker);
+        }
+
+        function speakTitle() {
+            const scene = SCRIPT[index];
+            if(scene && scene.text) speak(scene.text, "旁白");
+        }
+
+        window.onload = function() {
+            resizeApp(); 
+            let loadedCount = 0;
+            const assetKeys = Object.keys(ASSETS);
+            const checkProgress = () => {
+                loadedCount++;
+                const percent = Math.floor((loadedCount / assetKeys.length) * 100);
+                dom.startBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 遊戲載入中 (${percent}%)`;
+                if (loadedCount >= assetKeys.length) { dom.startBtn.innerHTML = "開始營業"; dom.startBtn.disabled = false; dom.startBtn.style.opacity = "1"; }
+            };
+            assetKeys.forEach(key => {
+                const img = new Image();
+                img.onload = checkProgress; img.onerror = checkProgress; img.src = ASSETS[key];
+            });
+            dom.bgm.load();
+        };
+
+        function startGame() { 
+            // 本版不再要求玩家輸入姓名/年齡；若前端 URL 有帶 name / nickname / age，僅作為紀錄與 API payload 使用。
+            const name = (URL_NAME || MOBILE || HEALTH_ID || "匿名玩家");
+            const age = (AGE || "0");
+
+            userData.name = name;
+            userData.age = parseInt(age, 10) || 0;
+            userData.startTime = new Date();
+
+            document.getElementById('intro-overlay').style.display = 'none'; 
+            render(); 
+            
+            // 修改：拔除原本淡入機制，確保音樂一開始就滿音量播放，並增加錯誤排除
+            if(isMusicOn){ 
+                dom.bgm.volume = 1.0; 
+                dom.bgm.play().catch(e => console.error("音樂播放被阻擋", e)); 
+            } 
+        }
+
+        function render() {
+            const scene = SCRIPT[index];
+            if (!scene) return;
+
+            if (scene.type === "scene") {
+                dom.bg.style.backgroundImage = `url('${ASSETS[scene.bg]}')`;
+                dom.hudTime.innerText = scene.time;
+                dom.char1.classList.remove('char-visible'); dom.char2.classList.remove('char-visible');
+                dom.calendarOverlay.style.display = 'none';
+                index++; render(); return;
+            }
+
+            if (scene.type === "end") { showReport(); return; }
+
+            if (scene.type === "key_search") {
+                dom.overlay.style.display = 'none';
+                dom.speakerName.innerText = "系統提示";
+                typeWriter("請在畫面上尋找鑰匙...", dom.text);
+                dom.key.style.display = 'block';
+                dom.key.onclick = () => {
+                    dom.key.style.display = 'none';
+                    dom.speakerName.innerText = "店長";
+                    typeWriter(scene.text, dom.text, () => {
+                        speak(scene.text, "店長");
+                        setTimeout(() => { index++; render(); }, 2000);
+                    });
+                };
+                return;
+            }
+
+            updateCharacter(scene);
+
+            if (scene.type === 'choice') showChoice(scene);
+            else if (scene.type === 'date_input') showDateInput(scene);
+            else if (scene.type === 'number_input') showNumberInput(scene);
+            else if (scene.type === 'time_picker') showTimePicker(scene); 
+            else showTalk(scene);
+        }
+
+        function updateCharacter(scene) {
+            const activeEl = activeCharIndex === 1 ? dom.char1 : dom.char2;
+            const nextEl = activeCharIndex === 1 ? dom.char2 : dom.char1;
+
+            // 日曆日期只在日曆角色出現時顯示；選擇完成前不顯示數字。
+            if (scene.char === 'char_clock' && selectedCalendarDate) {
+                setCalendarOverlay(selectedCalendarDate.year, selectedCalendarDate.month, selectedCalendarDate.day);
+                dom.calendarOverlay.style.display = 'block';
+            } else if (scene.char !== 'char_clock') {
+                dom.calendarOverlay.style.display = 'none';
+            }
+
+            if (scene.char && ASSETS[scene.char]) {
+                const targetSrc = ASSETS[scene.char];
+                if (!activeEl.src.includes(targetSrc) || !activeEl.classList.contains('char-visible')) {
+                    nextEl.className = 'char-img';
+                    if (scene.char === 'char_clock') nextEl.classList.add('calendar-pos');
+                    else if (scene.char === 'char_phone') nextEl.classList.add('phone-pos');
+                    else if (scene.object) nextEl.classList.add('object-mode');
+                    nextEl.src = targetSrc;
+                    nextEl.onload = () => { nextEl.classList.add('char-visible'); activeEl.classList.remove('char-visible'); activeCharIndex = activeCharIndex === 1 ? 2 : 1; };
+                }
+            } else { dom.char1.classList.remove('char-visible'); dom.char2.classList.remove('char-visible'); dom.calendarOverlay.style.display = 'none'; }
+        }
+
+        function setCalendarOverlay(year, month, day) {
+            dom.calendarRocYear.innerText = `民國 ${toRocYear(year)} 年`;
+            dom.calendarMd.innerText = `${month} 月 ${day} 日`;
+        }
+
+        function typeWriter(t, el, cb) { 
+            if (typeWriterTimer) clearInterval(typeWriterTimer); 
+            el.innerText = ""; let i = 0; 
+            typeWriterTimer = setInterval(() => { 
+                el.innerText += t.charAt(i); i++; 
+                if (i >= t.length) { clearInterval(typeWriterTimer); typeWriterTimer = null; if (cb) cb(); } 
+            }, 30); 
+        }
+
+        function showTalk(scene) { dom.overlay.style.display = 'none'; dom.speakerName.innerText = scene.speaker || "旁白"; typeWriter(scene.text, dom.text); speak(scene.text, scene.speaker || "旁白"); }
+
+        function showChoice(scene) {
+            dom.overlay.style.display = 'flex'; dom.titleText.innerText = scene.text; dom.content.innerHTML = "";
+            speak(scene.text, "旁白"); 
+            scene.choices.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'choice-btn';
+                
+                btn.innerHTML = `
+                    <div style="display:flex; align-items:center;">
+                        <div class="opt-speak-btn" onclick="event.stopPropagation(); speak('${opt.t}', '旁白')">
+                            <i class="fas fa-volume-up"></i>
+                        </div>
+                        <span style="text-align:left;">${opt.t}</span>
+                    </div>
+                    <i class="fas fa-chevron-right"></i>`;
+                
+                btn.onclick = () => processResult({ s: opt.s, money: opt.money, reaction: opt.reaction }, opt.key, scene.qId, opt.t);
+                dom.content.appendChild(btn);
+            });
+        }
+
+        function showDateInput(scene) {
+            dom.overlay.style.display = 'flex';
+            dom.titleText.innerText = scene.text;
+            speak(scene.text, '旁白');
+
+            const today = getTaipeiDateParts();
+            const daysInMonth = (year, month) => new Date(year, month, 0).getDate();
+
+            // 起始值刻意放在「今天附近」而不是直接顯示答案，避免一打開就等於作答完成。
+            let selectedY = today.year + (Math.random() < .5 ? -1 : 1);
+            let selectedM = today.month + (Math.random() < .5 ? -1 : 1);
+            if (selectedM < 1) selectedM = 12;
+            if (selectedM > 12) selectedM = 1;
+            let selectedD = today.day + (Math.random() < .5 ? -1 : 1);
+            selectedD = Math.max(1, Math.min(selectedD, daysInMonth(selectedY, selectedM)));
+
+            dom.content.innerHTML = `
+                <div class="date-stepper-wrap">
+                    <div class="date-stepper-hint">使用 ▲ ▼ 調整年份、月份與日期</div>
+                    <div class="date-stepper-grid">
+                        <div class="date-stepper-col">
+                            <div class="date-label">年份</div>
+                            <button class="date-step-btn" onclick="dateStep('y',1)">▲</button>
+                            <div class="date-step-value" id="date-y"></div>
+                            <button class="date-step-btn" onclick="dateStep('y',-1)">▼</button>
+                        </div>
+                        <div class="date-stepper-col">
+                            <div class="date-label">月份</div>
+                            <button class="date-step-btn" onclick="dateStep('m',1)">▲</button>
+                            <div class="date-step-value" id="date-m"></div>
+                            <button class="date-step-btn" onclick="dateStep('m',-1)">▼</button>
+                        </div>
+                        <div class="date-stepper-col">
+                            <div class="date-label">日期</div>
+                            <button class="date-step-btn" onclick="dateStep('d',1)">▲</button>
+                            <div class="date-step-value" id="date-d"></div>
+                            <button class="date-step-btn" onclick="dateStep('d',-1)">▼</button>
+                        </div>
+                    </div>
+                    <div class="date-summary" id="date-summary"></div>
+                </div>
+                <button class="confirm-btn" onclick="checkDateHandler()">確認日期</button>`;
+
+            function normalizeDate() {
+                selectedM = Math.max(1, Math.min(12, selectedM));
+                selectedY = Math.max(today.year - 1, Math.min(today.year + 1, selectedY));
+                selectedD = Math.max(1, Math.min(selectedD, daysInMonth(selectedY, selectedM)));
+            }
+
+            function refreshDateUi() {
+                normalizeDate();
+                document.getElementById('date-y').innerText = `民國\n${toRocYear(selectedY)} 年`;
+                document.getElementById('date-m').innerText = `${selectedM} 月`;
+                document.getElementById('date-d').innerText = `${selectedD} 日`;
+                document.getElementById('date-summary').innerText = `目前選擇：民國 ${toRocYear(selectedY)} 年 ${selectedM} 月 ${selectedD} 日`;
+            }
+
+            window.dateStep = (part, delta) => {
+                if (part === 'y') {
+                    selectedY += delta;
+                    if (selectedY > today.year + 1) selectedY = today.year - 1;
+                    if (selectedY < today.year - 1) selectedY = today.year + 1;
+                } else if (part === 'm') {
+                    selectedM += delta;
+                    if (selectedM > 12) selectedM = 1;
+                    if (selectedM < 1) selectedM = 12;
+                } else if (part === 'd') {
+                    const maxDay = daysInMonth(selectedY, selectedM);
+                    selectedD += delta;
+                    if (selectedD > maxDay) selectedD = 1;
+                    if (selectedD < 1) selectedD = maxDay;
+                }
+                refreshDateUi();
+            };
+
+            window.checkDateHandler = () => {
+                selectedCalendarDate = { year: selectedY, month: selectedM, day: selectedD };
+                setCalendarOverlay(selectedY, selectedM, selectedD);
+                dom.calendarOverlay.style.display = 'block';
+
+                const isCorrect = selectedY === today.year && selectedM === today.month && selectedD === today.day;
+                handleResult(isCorrect, scene, `Input: ${selectedY}/${selectedM}/${selectedD}`);
+            };
+
+            refreshDateUi();
+        }
+
+        function showNumberInput(scene) {
+            dom.overlay.style.display = 'flex'; dom.titleText.innerText = scene.text; speak(scene.text, "旁白"); 
+            dom.content.innerHTML = `<div id="numpad-display"></div><div id="numpad">
+                ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="num-btn" onclick="addNum(${n})">${n}</button>`).join('')}
+                <button class="num-btn" style="color:#fc8181" onclick="clearNum()">C</button>
+                <button class="num-btn" onclick="addNum(0)">0</button>
+                <button class="num-btn del-btn" onclick="backspace()"><i class="fas fa-backspace"></i></button>
+                <button class="num-btn ok-btn" style="grid-column: span 3; background:#48bb78; color:white; font-size:20px; margin-top:10px;" onclick="checkNum()">確認送出</button>
+            </div>`;
+            let val = ""; const display = document.getElementById('numpad-display');
+            window.addNum = (n) => { if (val === "" && n === 0) return; if(val.length<5) val+=n; display.innerText = val; };
+            window.clearNum = () => { val=""; display.innerText = ""; };
+            window.backspace = () => { val = val.slice(0, -1); display.innerText = val; };
+            window.checkNum = () => { if(val==="") return; handleResult(parseInt(val) === scene.answer, scene, `Input: ${val}`); };
+        }
+
+        function showTimePicker(scene) {
+            dom.overlay.style.display = 'flex'; dom.titleText.innerText = scene.text; speak(scene.text, "旁白"); 
+            dom.content.innerHTML = `<div class="time-picker-container"><div class="ampm-toggle">
+                <button class="ampm-btn active" id="btn-am" onclick="setAmPm('AM')">上午</button>
+                <button class="ampm-btn" id="btn-pm" onclick="setAmPm('PM')">下午</button>
+            </div><div class="hour-selector">${[1,2,3,4,5,6,7,8,9,10,11,12].map(h => `<div class="hour-btn" onclick="selectHour(${h}, this)">${h}</div>`).join('')}</div></div><button class="confirm-btn" onclick="checkTimePicker()">確認</button>`;
+            let selectedPeriod = 'AM', selectedHour = null;
+            window.setAmPm = (p) => { selectedPeriod = p; document.getElementById('btn-am').className = p==='AM' ? 'ampm-btn active' : 'ampm-btn'; document.getElementById('btn-pm').className = p==='PM' ? 'ampm-btn active' : 'ampm-btn'; };
+            window.selectHour = (h, el) => { selectedHour = h; document.querySelectorAll('.hour-btn').forEach(b => b.classList.remove('selected')); el.classList.add('selected'); };
+            window.checkTimePicker = () => { if(selectedHour === null) return; let finalH = selectedHour; if(selectedPeriod === 'PM' && selectedHour !== 12) finalH += 12; if(selectedPeriod === 'AM' && selectedHour === 12) finalH = 0; const expected = Array.isArray(scene.answer) ? scene.answer : [scene.answer]; handleResult(expected.includes(finalH), scene, `Input: ${selectedPeriod} ${selectedHour}`); };
+        }
+
+        function handleResult(isCorrect, scene, userChoiceText) { 
+            const outcome = isCorrect ? scene.correct : scene.wrong;
+            processResult(outcome, false, scene.qId, userChoiceText || (isCorrect ? "Correct" : "Wrong")); 
+        }
+
+        function processResult(data, isKeyTask, qId, choiceText) {
+            riskScore += (data.s || 0); totalMoney += (data.money || 0); dom.hudMoney.innerText = totalMoney; dom.overlay.style.display = 'none'; 
+            
+            if (qId) {
+                userData.logs.push({
+                    questionId: qId,
+                    result: data.s === 0 ? "PASS" : "FAIL", 
+                    choice: choiceText,
+                    timestamp: new Date()
+                });
+            }
+
+            if (data.reaction) {
+                blockAdvance = true; 
+                dom.speakerName.innerText = data.reaction.speaker; dom.dialog.style.display = 'flex'; 
+                typeWriter(data.reaction.text, dom.text, () => waitForClick()); speak(data.reaction.text, data.reaction.speaker); 
+            } else {
+                index++;
+                if (SCRIPT[index] && SCRIPT[index].type === 'key_search' && !isKeyTask) index++;
+                render();
+            }
+        }
+
+        function advanceStory() {
+            if (dom.overlay.style.display === 'flex' || dom.key.style.display === 'block' || blockAdvance) return;
+            if (typeWriterTimer) { clearInterval(typeWriterTimer); typeWriterTimer = null; dom.text.innerText = SCRIPT[index].text || ""; return; }
+            index++; if (index < SCRIPT.length) render();
+        }
+
+        function waitForClick() { 
+            const h = () => { 
+                dom.dialog.removeEventListener('click', h); 
+                blockAdvance = false; 
+                index++; render(); 
+            }; 
+            setTimeout(() => dom.dialog.addEventListener('click', h), 500); 
+        }
+
+        function resizeApp() { document.getElementById('mobile-container').style.height = `${window.innerHeight}px`; }
+        window.addEventListener('resize', resizeApp);
+
+        function showReport() {
+            const endedAt = new Date();
+            const durationMs = userData.startTime ? (endedAt.getTime() - userData.startTime.getTime()) : 0;
+            const resultSummary = getLocalResultSummary();
+            const apiPayload = buildApiPayload(resultSummary, durationMs, endedAt);
+
+            console.log("----- API PAYLOAD -----");
+            console.log(JSON.stringify(apiPayload, null, 2));
+
+            speechSynth.cancel();
+            showApiWaitingScreen();
+            submitToApiAndRenderHtml(apiPayload);
+        }
+
+        function getLocalResultSummary() {
+            let rankText = "", adviceContent = "";
+            if (riskScore <= 1) {
+                rankText = "金牌店長";
+                adviceContent = "太厲害了！您的記憶力與判斷力都非常清晰，請繼續保持！";
+            } else if (riskScore <= 3) {
+                rankText = "銀牌店長";
+                adviceContent = "表現不錯喔！多動腦、多運動可以讓頭腦更靈活。";
+            } else {
+                rankText = "銅牌店長";
+                adviceContent = "最近是不是比較累呢？建議找時間找醫生檢查一下喔，保養一下大腦。";
+            }
+
+            const totalQuestions = SCRIPT.filter(item => item.qId).length;
+            const completedQuestions = userData.logs.length;
+			const passCount = userData.logs.filter(item => item.result === "PASS").length;
+            const failCount = userData.logs.filter(item => item.result === "FAIL").length;
+            
+            // accuracy 改為錯誤題數：錯 2 題 => accuracy = 2；全對 => accuracy = 0
+            const accuracyPercent = failCount;
+
+            return {
+                rankText,
+                adviceContent,
+                totalQuestions,
+                completedQuestions,
+                passCount,
+                accuracyPercent
+            };
+        }
+
+        function buildApiPayload(summary, totalDurationMs, endedAt) {
+            return {
+                // ---- 頂層欄位：URL 帶入的值原樣往後送 ----
+                health_id: HEALTH_ID,
+                game_id: GAME_ID,
+                game_level: GAME_LEVEL,
+                age: AGE || String(userData.age || ''),
+                reminderCount: String(summary.accuracyPercent),
+                total_duration_ms: String(totalDurationMs || 0),
+                mobile: MOBILE,
+
+                // ---- 裝置資訊 ----
+                device: {
+                    user_agent: navigator.userAgent,
+                    screen: {
+                        width: window.screen ? window.screen.width : window.innerWidth,
+                        height: window.screen ? window.screen.height : window.innerHeight
+                    },
+                    device_pixel_ratio: window.devicePixelRatio || 1,
+                    language: navigator.language || 'unknown',
+                    timezone_offset: -new Date().getTimezoneOffset()
+                },
+
+                // ---- 本遊戲計分資訊 ----
+                scoring: {
+                    risk_score: riskScore,
+                    total_money: totalMoney,
+                    rank: summary.rankText,
+                    advice: summary.adviceContent,
+                    pass_count: summary.passCount,
+                    completed_questions: summary.completedQuestions,
+                    total_questions: summary.totalQuestions
+                },
+
+                // ---- 遊戲明細 ----
+                details: {
+                    game_name: '幸福柑仔店',
+                    player_name: userData.name,
+                    started_at: userData.startTime ? userData.startTime.toISOString() : null,
+                    ended_at: endedAt ? endedAt.toISOString() : new Date().toISOString(),
+                    completed_orders: summary.completedQuestions,
+                    total_orders: summary.totalQuestions,
+                    tab_blur_count: tabBlurCount,
+                    url_params: URL_PARAM_OBJECT,
+                    logs: userData.logs.map(item => ({
+                        question_id: item.questionId,
+                        result: item.result,
+                        choice: item.choice,
+                        timestamp: item.timestamp instanceof Date ? item.timestamp.toISOString() : item.timestamp
+                    }))
+                }
+            };
+        }
+
+        function showApiWaitingScreen(message = '結果計算中...') {
+            const overlay = document.getElementById('report-overlay');
+            overlay.innerHTML = `
+                <div class="api-waiting-card">
+                    <h2 style="margin:0 0 20px 0;">請稍候</h2>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin:22px 0;font-size:20px;font-weight:bold;color:#4a5568;">
+                        <span class="upload-spinner"></span>
+                        <span>${message}</span>
+                    </div>
+                    <div style="font-size:16px;color:#718096;line-height:1.7;">
+                        系統正在送出遊戲結果，完成後會自動顯示正式結果頁。
+                    </div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        function showApiErrorScreen(payload, errorMessage) {
+            const overlay = document.getElementById('report-overlay');
+            const safeError = String(errorMessage || '未知錯誤')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            overlay.innerHTML = `
+                <div class="api-waiting-card">
+                    <h2 style="margin:0 0 16px 0;color:#e53e3e;">⚠️ 結果送出失敗</h2>
+                    <div style="background:#fff5f5;color:#c53030;border:1px solid #feb2b2;border-radius:12px;padding:14px;margin:16px 0;font-weight:bold;line-height:1.5;">
+                        ${safeError}
+                    </div>
+                    <div style="font-size:16px;color:#718096;line-height:1.7;margin-bottom:16px;">
+                        可以重新送出一次，或返回首頁重新進入遊戲。
+                    </div>
+                    <button id="retry-api-btn" style="background:#f6ad55;color:white;border:none;padding:15px 34px;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;margin:6px;">重新送出</button>
+                    <button id="reload-game-btn" style="background:#4fd1c5;color:white;border:none;padding:15px 34px;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;margin:6px;">返回首頁</button>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+
+            const retryBtn = document.getElementById('retry-api-btn');
+            if (retryBtn) {
+                retryBtn.onclick = () => {
+                    showApiWaitingScreen('重新送出中...');
+                    submitToApiAndRenderHtml(payload);
+                };
+            }
+            const reloadBtn = document.getElementById('reload-game-btn');
+            if (reloadBtn) reloadBtn.onclick = () => location.reload();
+        }
+
+        async function submitToApiAndRenderHtml(payload) {
+            if (!payload.health_id || !payload.game_id) {
+                showApiErrorScreen(payload, '缺少 health_id / game_id，無法送出遊戲結果。');
+                return;
+            }
+
+            const result = await uploadGameResult(payload);
+            if (result.ok && result.body && result.body.trim()) {
+                showOfficialResultPage(result.body);
+            } else {
+                showApiErrorScreen(payload, result.error || 'API 未回傳有效 HTML。');
+            }
+        }
+
+        async function uploadGameResult(payload) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/html, application/xhtml+xml, text/plain, */*'
+                    },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+
+                const body = await response.text();
+                if (!response.ok) {
+                    return {
+                        ok: false,
+                        status: response.status,
+                        body,
+                        error: `伺服器回應 HTTP ${response.status}`
+                    };
+                }
+                return { ok: true, status: response.status, body };
+            } catch (err) {
+                const isAbort = err && err.name === 'AbortError';
+                return {
+                    ok: false,
+                    status: 0,
+                    error: isAbort ? 'API 回應逾時，請重新送出。' : (err && err.message ? err.message : '網路連線失敗')
+                };
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        function showOfficialResultPage(htmlText) {
+            if (!htmlText) return;
+            document.open();
+            document.write(htmlText);
+            document.close();
+        }
+    </script>
+</body>
+</html>
