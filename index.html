@@ -131,6 +131,9 @@
             box-shadow: 0 2px 0 #dd6b20;
         }
         .opt-speak-btn:active { transform: scale(0.95); box-shadow: none; }
+        .speech-unavailable .read-btn,
+        .speech-unavailable .title-speak-btn,
+        .speech-unavailable .opt-speak-btn { display: none !important; }
 
         /* 輸入介面 */
         .input-group { display: flex; gap: 8px; margin-bottom: 25px; width: 100%; justify-content: center; }
@@ -268,7 +271,7 @@
 <body>
 
     <div id="mobile-container">
-        <div id="build-badge">TEST v4.2 · build 20260904-02</div>
+        <div id="build-badge">TEST v4.3 · build 20260904-03</div>
         <audio id="bgMusic" loop preload="auto"><source src="https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/audio/bgm.mp3" type="audio/mpeg"></audio>
 
         <div id="music-toggle" onclick="toggleMusic()">
@@ -371,7 +374,7 @@
 
     <script>
         // ================= GO HEALTH API 參數 =================
-        const BUILD_VERSION = '20260904-02';
+        const BUILD_VERSION = '20260904-03';
         const API_URL = 'https://www.st.happygocard.com.tw/HAP/gameresult';
         const urlParams = new URLSearchParams(window.location.search);
         // 不使用 Object.fromEntries，避免較舊 Android WebView 缺少此方法。
@@ -388,7 +391,7 @@
         function reportCompatError(code, error) {
             var badge = document.getElementById('build-badge');
             if (badge) {
-                badge.innerText = 'TEST v4.2 · ' + code;
+                badge.innerText = 'TEST v4.3 · ' + code;
                 badge.style.background = '#9b2c2c';
                 badge.style.color = '#ffffff';
             }
@@ -473,9 +476,9 @@
             char_tv: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/tv.png",
             char_keys: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/key.png",
             char_phone: "https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/images/phone.png", 
-            char_clock_cat: "assets/images/calendar_cat.png?v=20260904-02",
-            char_clock_blank: "assets/images/calendar_blank.png?v=20260904-02",
-            char_clock: "assets/images/calendar_cat.png?v=20260904-02" 
+            char_clock_cat: "assets/images/calendar_cat.png?v=20260904-03",
+            char_clock_blank: "assets/images/calendar_blank.png?v=20260904-03",
+            char_clock: "assets/images/calendar_cat.png?v=20260904-03" 
         };
 
         const VOICE_PROFILES = {
@@ -603,7 +606,13 @@
         let typeWriterTimer = null;
         let isMusicOn = true;
         let blockAdvance = false; 
-        let speechSynth = window.speechSynthesis;
+        let speechSynth = window.speechSynthesis || null;
+        const speechSupported = !!(
+            speechSynth &&
+            typeof speechSynth.cancel === 'function' &&
+            typeof speechSynth.speak === 'function' &&
+            typeof window.SpeechSynthesisUtterance === 'function'
+        );
 
         const dom = {
             bg: document.getElementById('bg-layer'),
@@ -625,23 +634,51 @@
             calendarMd: document.getElementById('calendar-md')
         };
 
+        function stopSpeechSafely() {
+            if (!speechSupported) return;
+            try { speechSynth.cancel(); } catch (speechError) {
+                if (window.console && console.warn) console.warn('Speech stop unavailable', speechError);
+            }
+        }
+
+        function playBgmSafely() {
+            try {
+                var playResult = dom.bgm.play();
+                if (playResult && typeof playResult.catch === 'function') {
+                    playResult.catch(function() {});
+                }
+            } catch (audioError) {
+                if (window.console && console.warn) console.warn('Audio play unavailable', audioError);
+            }
+        }
+
         function toggleMusic() {
             isMusicOn = !isMusicOn;
             const icon = document.querySelector('#music-toggle i');
-            if (isMusicOn) { icon.className = 'fas fa-volume-up'; dom.bgm.play().catch(e=>{}); } 
-            else { icon.className = 'fas fa-volume-mute'; dom.bgm.pause(); speechSynth.cancel(); }
+            if (isMusicOn) {
+                icon.className = 'fas fa-volume-up';
+                playBgmSafely();
+            } else {
+                icon.className = 'fas fa-volume-mute';
+                try { dom.bgm.pause(); } catch (audioError) {}
+                stopSpeechSafely();
+            }
         }
 
         function speak(text, role) {
-            if (!isMusicOn) return; 
-            speechSynth.cancel(); 
-            // 修改：過濾掉括號與不必要的符號，防止被朗讀出來
-            const cleanText = text.replace(/[()（）『』「」]/g, '');
-            const u = new SpeechSynthesisUtterance(cleanText);
-            u.lang = 'zh-TW';
-            const profile = VOICE_PROFILES[role] || { pitch: 1.0, rate: 1.0 };
-            u.pitch = profile.pitch; u.rate = profile.rate;
-            speechSynth.speak(u);
+            // HAPPY GO 舊 Android WebView 可能完全沒有 Web Speech API；沒有時直接略過，不中斷遊戲。
+            if (!isMusicOn || !speechSupported || !text) return;
+            try {
+                stopSpeechSafely();
+                const cleanText = text.replace(/[()（）『』「」]/g, '');
+                const u = new window.SpeechSynthesisUtterance(cleanText);
+                u.lang = 'zh-TW';
+                const profile = VOICE_PROFILES[role] || { pitch: 1.0, rate: 1.0 };
+                u.pitch = profile.pitch; u.rate = profile.rate;
+                speechSynth.speak(u);
+            } catch (speechError) {
+                if (window.console && console.warn) console.warn('Speech unavailable', speechError);
+            }
         }
 
         function replayVoice() {
@@ -656,6 +693,7 @@
 
         window.onload = function() {
             resizeApp();
+            if (!speechSupported) document.body.className += ' speech-unavailable';
             try { initLegacyDatePicker(); } catch (dateInitError) { reportCompatError('DATE INIT ERR', dateInitError); }
             let loadedCount = 0;
             const assetKeys = Object.keys(ASSETS);
@@ -687,7 +725,7 @@
             // 修改：拔除原本淡入機制，確保音樂一開始就滿音量播放，並增加錯誤排除
             if(isMusicOn){ 
                 dom.bgm.volume = 1.0; 
-                dom.bgm.play().catch(e => console.error("音樂播放被阻擋", e)); 
+                playBgmSafely();
             } 
         }
 
@@ -801,25 +839,57 @@
 
         function showTalk(scene) { dom.overlay.style.display = 'none'; dom.speakerName.innerText = scene.speaker || "旁白"; typeWriter(scene.text, dom.text); speak(scene.text, scene.speaker || "旁白"); }
 
+        function createChoiceButton(option, scene) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'choice-btn';
+
+            var row = document.createElement('div');
+            row.style.cssText = 'display:table;width:100%;table-layout:fixed;';
+
+            var voiceButton = document.createElement('span');
+            voiceButton.className = 'opt-speak-btn';
+            voiceButton.style.cssText += ';display:table-cell;vertical-align:middle;';
+            voiceButton.innerHTML = '<i class="fas fa-volume-up"></i>';
+            voiceButton.addEventListener('click', function(event) {
+                if (event && event.stopPropagation) event.stopPropagation();
+                speak(option.t, '旁白');
+            }, false);
+
+            var text = document.createElement('span');
+            text.style.cssText = 'display:table-cell;width:100%;vertical-align:middle;text-align:left;';
+            text.innerText = option.t;
+
+            var arrow = document.createElement('span');
+            arrow.style.cssText = 'display:table-cell;width:24px;vertical-align:middle;text-align:right;';
+            arrow.innerHTML = '<i class="fas fa-chevron-right"></i>';
+
+            row.appendChild(voiceButton);
+            row.appendChild(text);
+            row.appendChild(arrow);
+            button.appendChild(row);
+            button.addEventListener('click', function() {
+                processResult(
+                    { s: option.s, money: option.money, reaction: option.reaction },
+                    option.key,
+                    scene.qId,
+                    option.t
+                );
+            }, false);
+            return button;
+        }
+
         function showChoice(scene) {
-            dom.overlay.style.display = 'flex'; dom.titleText.innerText = scene.text; dom.content.innerHTML = "";
-            speak(scene.text, "旁白"); 
-            scene.choices.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'choice-btn';
-                
-                btn.innerHTML = `
-                    <div style="display:flex; align-items:center;">
-                        <div class="opt-speak-btn" onclick="event.stopPropagation(); speak('${opt.t}', '旁白')">
-                            <i class="fas fa-volume-up"></i>
-                        </div>
-                        <span style="text-align:left;">${opt.t}</span>
-                    </div>
-                    <i class="fas fa-chevron-right"></i>`;
-                
-                btn.onclick = () => processResult({ s: opt.s, money: opt.money, reaction: opt.reaction }, opt.key, scene.qId, opt.t);
-                dom.content.appendChild(btn);
-            });
+            dom.overlay.style.display = 'flex';
+            dom.titleText.innerText = scene.text;
+            dom.content.innerHTML = '';
+
+            // 朗讀不支援時 speak() 會安全略過，不再阻止後續選項建立。
+            speak(scene.text, '旁白');
+            var choiceIndex;
+            for (choiceIndex = 0; choiceIndex < scene.choices.length; choiceIndex++) {
+                dom.content.appendChild(createChoiceButton(scene.choices[choiceIndex], scene));
+            }
         }
 
         var legacyDateState = null;
@@ -1071,7 +1141,7 @@
             console.log("----- API PAYLOAD -----");
             console.log(JSON.stringify(apiPayload, null, 2));
 
-            speechSynth.cancel();
+            stopSpeechSafely();
             showApiWaitingScreen();
             submitToApiAndRenderHtml(apiPayload);
         }
