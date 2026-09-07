@@ -6,7 +6,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>幸福柑仔店 - AD8 舊版 WebView 相容測試版</title>
+    <title>幸福柑仔店</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -207,13 +207,6 @@
         #calendar-date-text .roc-year { display:block; font-size: 17px; letter-spacing: 1px; }
         #calendar-date-text .md { display:block; margin-top: 5px; font-size: 24px; letter-spacing: 1px; }
 
-        #build-badge {
-            position: absolute; top: 65px; right: 12px; z-index: 250; pointer-events: none;
-            padding: 3px 8px; border-radius: 10px; background: rgba(48,31,20,.72);
-            border: 1px solid rgba(255,235,190,.55); color: #ffe8b2; font-size: 10px;
-            line-height: 1.2; letter-spacing: .03em;
-        }
-
         /* Numpad & TimePicker */
         #numpad { display: block; width: 100%; margin-bottom: 15px; overflow: hidden; }
         .num-btn { 
@@ -271,7 +264,6 @@
 <body>
 
     <div id="mobile-container">
-        <div id="build-badge">TEST v4.3 · build 20260904-03</div>
         <audio id="bgMusic" loop preload="auto"><source src="https://www.st.happygocard.com.tw/HAPUPLOAD/game/assets/audio/bgm.mp3" type="audio/mpeg"></audio>
 
         <div id="music-toggle" onclick="toggleMusic()">
@@ -374,7 +366,6 @@
 
     <script>
         // ================= GO HEALTH API 參數 =================
-        const BUILD_VERSION = '20260904-03';
         const API_URL = 'https://www.st.happygocard.com.tw/HAP/gameresult';
         const urlParams = new URLSearchParams(window.location.search);
         // 不使用 Object.fromEntries，避免較舊 Android WebView 缺少此方法。
@@ -389,12 +380,6 @@
         const URL_NAME = urlParams.get('name') || urlParams.get('nickname') || '';
 
         function reportCompatError(code, error) {
-            var badge = document.getElementById('build-badge');
-            if (badge) {
-                badge.innerText = 'TEST v4.3 · ' + code;
-                badge.style.background = '#9b2c2c';
-                badge.style.color = '#ffffff';
-            }
             if (window.console && console.error) console.error(code, error || '');
         }
 
@@ -529,7 +514,7 @@
             { type: "talk", speaker: "店長", text: "首先要把日曆撕到今天... 咦？今天是幾號？", char: "char_clock" },
             { type: "date_input", text: "請選擇今日的正確日期：", char: "char_clock", qId: "Q1_Date",
               correct: { money: 100, s: 0, reaction: {text: "對啦！日曆換好了，準備開始打拼！", speaker: "店長"} },
-              wrong: { money: 0, s: 1, reaction: {text: "咦？日曆好像撕錯了，算了先不管它，開始打拼！", speaker: "店長"} } },
+              wrong: { money: 0, s: 1, reaction: {text: "咦？日曆好像撕錯了，我們先確認一下今天的日期吧！", speaker: "店長"} } },
             
             { type: "talk", speaker: "旁白", text: "(門口送來一大箱乖乖進貨了，堆得亂七八糟。)" },
             { type: "talk", speaker: "店長", text: "乖乖進貨了，但堆得亂七八糟。以前我最喜歡擺整齊了...", char: null },
@@ -594,9 +579,9 @@
             { type: "talk", speaker: "店長", text: "糟糕，手上的鑰匙串不知道放哪去了？" },
             { type: "choice", text: "請選擇尋找區域：", qId: "Q8_Orientation", choices: [
                 { t: "去櫃台桌面找找看", s: 0, money: 200, key: true },
-                { t: "去冰箱裡面找找看", s: 1, money: 0 }
+                { t: "去冰箱裡面找找看", s: 1, money: 0, reaction: {text: "冰箱裡好像沒有……再到櫃台找找看吧！", speaker: "店長", autoAdvance: true} }
             ] },
-            { type: "key_search", text: "找到了！原來壓在文件下面。", char: null },
+            { type: "key_search", text: "找到了！原來壓在文件下面。今天辛苦了，來看看本日營運日報吧！", char: null },
             { type: "end" }
         ];
 
@@ -969,6 +954,13 @@
                 selectedCalendarDate.month === legacyDateToday.month &&
                 selectedCalendarDate.day === legacyDateToday.day;
 
+            if (!isCorrect && legacyDateScene.wrong && legacyDateScene.wrong.reaction) {
+                legacyDateScene.wrong.reaction.text =
+                    '咦？今天是民國 ' + toRocYear(legacyDateToday.year) + ' 年 ' +
+                    legacyDateToday.month + ' 月 ' + legacyDateToday.day +
+                    ' 日才對，我們把日期記好，再開始今天的營業吧！';
+            }
+
             handleResult(
                 isCorrect,
                 legacyDateScene,
@@ -1020,8 +1012,8 @@
                     if (window.console && console.warn) console.warn('Voice unavailable', voiceError);
                 }
             } catch (dateError) {
-                reportCompatError('DATE ERR', dateError);
-                errorBox.innerText = '日期元件載入失敗，請截圖回報「DATE ERR」。';
+                reportCompatError('DATE_LOAD_ERROR', dateError);
+                errorBox.innerText = '日期元件暫時無法載入，請重新進入遊戲。';
                 errorBox.style.display = 'block';
             }
         }
@@ -1105,7 +1097,18 @@
             if (data.reaction) {
                 blockAdvance = true; 
                 dom.speakerName.innerText = data.reaction.speaker; dom.dialog.style.display = 'flex'; 
-                typeWriter(data.reaction.text, dom.text, () => waitForClick()); speak(data.reaction.text, data.reaction.speaker); 
+                if (data.reaction.autoAdvance) {
+                    typeWriter(data.reaction.text, dom.text, function() {
+                        setTimeout(function() {
+                            blockAdvance = false;
+                            index++;
+                            render();
+                        }, 1200);
+                    });
+                } else {
+                    typeWriter(data.reaction.text, dom.text, () => waitForClick());
+                }
+                speak(data.reaction.text, data.reaction.speaker); 
             } else {
                 index++;
                 if (SCRIPT[index] && SCRIPT[index].type === 'key_search' && !isKeyTask) index++;
