@@ -259,6 +259,47 @@
         @keyframes uploadSpin { to { transform: rotate(360deg); } }
 
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+        /* 2026-10-02：作答區使用實際可視高度，底部動作區不參與捲動。 */
+        #interaction-overlay {
+            justify-content: flex-start;
+            padding: 16px;
+            padding-top: calc(16px + env(safe-area-inset-top, 0px));
+            padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            padding-left: calc(16px + env(safe-area-inset-left, 0px));
+            padding-right: calc(16px + env(safe-area-inset-right, 0px));
+        }
+        #interaction-title { flex-shrink: 0; font-size: 22px; padding: 12px; margin-bottom: 16px; }
+        #interaction-title > span { min-width: 0; }
+        .title-speak-btn { flex-shrink: 0; margin-left: 8px; }
+        #interaction-content {
+            flex: 1 1 auto; min-height: 0; max-height: none;
+            overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding: 0 2px 8px;
+        }
+        #interaction-content > * { flex-shrink: 0; }
+        #interaction-actions { display: none; width: 100%; flex-shrink: 0; padding: 8px 2px 6px; }
+        #interaction-actions .confirm-btn { min-height: 52px; padding: 12px 16px; font-size: 22px; margin: 0; }
+        #numpad { margin-bottom: 0; flex-shrink: 0; }
+        #numpad-display { height: 72px; font-size: 36px; margin-bottom: 12px; flex-shrink: 0; }
+        .num-btn { min-height: 52px; padding: 12px 4px; font-size: 24px; }
+        #legacy-date-overlay {
+            padding-top: 18px;
+            padding-top: calc(18px + env(safe-area-inset-top, 0px));
+            padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+        }
+        /* 日期題保留原靜態 DOM，整頁可捲至確認日期。 */
+        @media (max-height: 620px) {
+            #interaction-title { font-size: 20px; padding: 8px 10px; margin-bottom: 10px; }
+            #numpad-display { height: 56px; font-size: 30px; padding: 6px; margin-bottom: 8px; }
+            .num-btn { min-height: 48px; padding: 8px 4px; font-size: 22px; }
+            .time-picker-container { padding: 12px; }
+            .ampm-toggle { margin-bottom: 10px; }
+            .ampm-btn { padding: 8px; }
+            .hour-btn { min-height: 48px; padding: 10px 0; }
+            .date-picker-wrap { padding: 12px 8px; }
+            .date-step-btn { height: 48px; line-height: 44px; }
+            .date-value { height: 56px; padding-top: 10px; }
+        }
     </style>
 </head>
 <body>
@@ -305,6 +346,7 @@
                 <div class="title-speak-btn" style="background: rgba(255,255,255,0.2); width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;" onclick="speakTitle()"><i class="fas fa-volume-up"></i></div>
             </div>
             <div id="interaction-content"></div>
+            <div id="interaction-actions"></div>
         </div>
 
         <!-- 舊 Android WebView 專用：日期 Picker 預先存在 HTML，不在作答時動態建立 -->
@@ -864,7 +906,26 @@
             return button;
         }
 
+        function resetInteractionActions() {
+            var actions = document.getElementById('interaction-actions');
+            actions.innerHTML = '';
+            actions.style.display = 'none';
+            dom.content.scrollTop = 0;
+        }
+
+        function setInteractionAction(label, handler) {
+            var actions = document.getElementById('interaction-actions');
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'confirm-btn';
+            button.innerText = label;
+            button.onclick = handler;
+            actions.appendChild(button);
+            actions.style.display = 'block';
+        }
+
         function showChoice(scene) {
+            resetInteractionActions();
             dom.overlay.style.display = 'flex';
             dom.titleText.innerText = scene.text;
             dom.content.innerHTML = '';
@@ -1019,6 +1080,7 @@
         }
 
         function showNumberInput(scene) {
+            resetInteractionActions();
             dom.overlay.style.display = 'flex'; dom.titleText.innerText = scene.text; speak(scene.text, "旁白"); 
             var numberHtml = '<div id="numpad-display"></div><div id="numpad">';
             var numberIndex;
@@ -1028,7 +1090,7 @@
             numberHtml += '<button type="button" class="num-btn" style="color:#fc8181" onclick="clearNum()">C</button>';
             numberHtml += '<button type="button" class="num-btn" onclick="addNum(0)">0</button>';
             numberHtml += '<button type="button" class="num-btn del-btn" onclick="backspace()"><i class="fas fa-backspace"></i></button>';
-            numberHtml += '<button type="button" class="num-btn ok-btn" style="background:#48bb78;color:white;font-size:20px;margin-top:10px;" onclick="checkNum()">確認送出</button></div>';
+            numberHtml += '</div>';
             dom.content.innerHTML = numberHtml;
 
             var val = "";
@@ -1037,9 +1099,11 @@
             window.clearNum = function() { val = ""; display.innerText = ""; };
             window.backspace = function() { val = val.slice(0, -1); display.innerText = val; };
             window.checkNum = function() { if (val === "") return; handleResult(parseInt(val, 10) === scene.answer, scene, 'Input: ' + val); };
+            setInteractionAction('確認送出', function() { window.checkNum(); });
         }
 
         function showTimePicker(scene) {
+            resetInteractionActions();
             dom.overlay.style.display = 'flex'; dom.titleText.innerText = scene.text; speak(scene.text, "旁白"); 
             var hourHtml = '<div class="time-picker-container"><div class="ampm-toggle">';
             hourHtml += '<button type="button" class="ampm-btn active" id="btn-am" onclick="setAmPm(\'AM\')">上午</button>';
@@ -1048,8 +1112,9 @@
             for (hourIndex = 1; hourIndex <= 12; hourIndex++) {
                 hourHtml += '<button type="button" class="hour-btn" onclick="selectHour(' + hourIndex + ', this)">' + hourIndex + '</button>';
             }
-            hourHtml += '</div></div><button type="button" class="confirm-btn" onclick="checkTimePicker()">確認</button>';
+            hourHtml += '</div></div>';
             dom.content.innerHTML = hourHtml;
+            setInteractionAction('確認', function() { window.checkTimePicker(); });
 
             var selectedPeriod = 'AM';
             var selectedHour = null;
@@ -1132,8 +1197,19 @@
             setTimeout(() => dom.dialog.addEventListener('click', h), 500); 
         }
 
-        function resizeApp() { document.getElementById('mobile-container').style.height = `${window.innerHeight}px`; }
+        function resizeApp() {
+            var viewport = window.visualViewport;
+            var container = document.getElementById('mobile-container');
+            container.style.height = (viewport ? viewport.height : window.innerHeight) + 'px';
+            container.style.top = (viewport ? viewport.offsetTop : 0) + 'px';
+        }
         window.addEventListener('resize', resizeApp);
+        window.addEventListener('orientationchange', resizeApp);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', resizeApp);
+            window.visualViewport.addEventListener('scroll', resizeApp);
+        }
+        resizeApp();
 
         function showReport() {
             const endedAt = new Date();
